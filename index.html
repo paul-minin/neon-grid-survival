@@ -9,12 +9,21 @@
 </head>
 <body>
   <div id="ui">
+    <div id="topbar">
+      <div id="actions">
+        <button id="buy-tile" data-cost="5">Buy Tile (5)</button>
+        <button id="upgrade-tile" data-cost="6">Upgrade → Turret (6)</button>
+      </div>
+      <div id="waveinfo">Wave: <span id="wave">0</span> • Next: <span id="wave-timer">--:--</span></div>
+    </div>
+
     <div id="stats">
       <div>Score: <span id="score">0</span></div>
       <div>Energy: <span id="energy">0</span></div>
       <div>Time: <span id="time">0</span>s</div>
       <div>Highscore: <span id="highscore">0</span></div>
     </div>
+
     <div id="toolbar">
       <button id="build-block" data-cost="5">Block (5)</button>
       <button id="build-slow" data-cost="4">Slow (4)</button>

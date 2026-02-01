@@ -31,6 +31,11 @@
   let turrets = {}; // key -> {x,y,cool}
   let territory = {}; // claimed tiles by player (x,y) -> true
 
+  // waves
+  let waveNumber = 0;
+  const WAVE_INTERVAL = 60 * 1000; // 1 minute default
+  let nextWaveAt = Date.now() + WAVE_INTERVAL
+
   // game state
   let player = {x:10,y:10,px:10,py:10,moveProgress:0};
   let orbs = [];
@@ -45,6 +50,12 @@
   let lastAlienSpawn = 0;
   let highscore = localStorage.getItem('neongrid_high')||0;
   highscoreEl.textContent = highscore;
+
+  // UI bindings for new actions
+  const waveEl = document.getElementById('wave');
+  const waveTimerEl = document.getElementById('wave-timer');
+  const buyBtn = document.getElementById('buy-tile');
+  const upgradeBtn = document.getElementById('upgrade-tile');
 
   // camera center on player
   let cam = {x: player.x - Math.floor(VIEW/2), y: player.y - Math.floor(VIEW/2)};
@@ -140,12 +151,12 @@
     Object.keys(turrets).forEach(k=>{
       const t = turrets[k]; t.cool = (t.cool||0) - 1;
       if(t.cool<=0){
-        // find nearest alien within range 3
+        // find nearest alien within range
         let target = null; let bestDist = 999;
         aliens.forEach(a=>{
-          const d = Math.max(Math.abs(a.x - t.x), Math.abs(a.y - t.y)); if(d<=3 && d<bestDist){ bestDist=d; target=a }
+          const d = Math.max(Math.abs(a.x - t.x), Math.abs(a.y - t.y)); if(d<= (t.range||3) && d<bestDist){ bestDist=d; target=a }
         });
-        if(target){ target.hp -= 1; t.cool = 3; }
+        if(target){ target.hp -= (t.damage||1); t.cool = 3; }
       }
     });
 
@@ -159,6 +170,18 @@
 
     // update UI
     scoreEl.textContent = score; energyEl.textContent = energy; timeEl.textContent = Math.floor(timePlayed);
+
+    // waves UI and spawn
+    const now = Date.now();
+    if(now >= nextWaveAt){ spawnWave(); }
+    const rem = Math.max(0, nextWaveAt - now);
+    const mm = String(Math.floor(rem/60000)).padStart(2,'0'), ss = String(Math.floor((rem%60000)/1000)).padStart(2,'0');
+    waveEl.textContent = waveNumber; waveTimerEl.textContent = `${mm}:${ss}`;
+
+    // enable/disable buy & upgrade buttons based on state
+    const key = player.x+','+player.y;
+    buyBtn.disabled = !(energy>=5 && !territory[key] && canBuyTile(player.x,player.y));
+    upgradeBtn.disabled = !(energy>=8 && territory[key] && !turrets[key]);
   }
 
   // movement input
@@ -198,9 +221,33 @@
     else if(buildMode==='house'){ houses[x+','+y]={hp:12}; setTile(x,y,types.HOUSE); claimTerritory(x,y,2); }
     else if(buildMode==='turret'){ // turrets only on owned tiles
       if(!isOwned(x,y)) return;
-      turrets[x+','+y] = {x,y,cool:0}; setTile(x,y,types.TURRET);
+      turrets[x+','+y] = {x,y,cool:0,range:3,damage:1}; setTile(x,y,types.TURRET);
     }
     energy -= cost; score += 1;
+  }
+
+  // --- New actions: buy current tile and upgrade to turret ---
+  function hasTerritory(){ return Object.keys(territory).length>0 }
+  function canBuyTile(x,y){ if(!hasTerritory()) return true; const n = [[1,0],[-1,0],[0,1],[0,-1]]; for(let i=0;i<n.length;i++){ const nx=x+n[i][0], ny=y+n[i][1]; if(territory[nx+','+ny]) return true } return false }
+
+  function buyCurrentTile(){ const x=player.x,y=player.y; const key = x+','+y; const cost = 5; if(energy<cost) return; if(territory[key]) return; if(!canBuyTile(x,y)) return; territory[key]=true; energy-=cost; score+=1 }
+
+  function upgradeCurrentTile(){ const x=player.x,y=player.y; const key = x+','+y; const cost = 8; if(energy<cost) return; if(!territory[key]) return; if(turrets[key]) return; turrets[key] = {x,y,cool:0,range:4,damage:2}; setTile(x,y,types.TURRET); energy-=cost; score+=2 }
+
+  buyBtn.addEventListener('click', buyCurrentTile);
+  upgradeBtn.addEventListener('click', upgradeCurrentTile);
+
+  function spawnWave(){
+    waveNumber++;
+    const count = 3 + Math.floor(waveNumber * 1.2);
+    for(let i=0;i<count;i++){
+      const angle = Math.random()*Math.PI*2; const dist = VIEW/2 + Math.random()*VIEW/2;
+      const x = Math.floor(player.x + Math.cos(angle)*dist);
+      const y = Math.floor(player.y + Math.sin(angle)*dist);
+      aliens.push({x,y,hp: 2 + Math.floor(waveNumber/3)});
+    }
+    // next wave shortens slowly but not below 30s
+    nextWaveAt = Date.now() + Math.max(30000, WAVE_INTERVAL - Math.floor(waveNumber/2)*5000);
   }
 
   // keyboard
@@ -276,6 +323,8 @@
       const t=turrets[k]; const sx=(t.x-cam.x)*TILE, sy=(t.y-cam.y)*TILE;
       ctx.fillStyle='#ffd19a'; ctx.fillRect(sx+6,sy+6, TILE-12, TILE-12);
       ctx.fillStyle='#ff8f42'; ctx.fillRect(sx+TILE/2-3, sy+TILE/2-3,6,6);
+      // turret range hint (subtle)
+      if(t.range){ ctx.strokeStyle='rgba(255,140,80,0.06)'; ctx.lineWidth=1; ctx.strokeRect(sx-(t.range-1)*TILE+0.5, sy-(t.range-1)*TILE+0.5, TILE*(t.range*2-1)-1, TILE*(t.range*2-1)-1); }
     });
 
     // draw houses and their hp
@@ -289,7 +338,14 @@
       const ax = (a.x - cam.x) * TILE + TILE/2; const ay = (a.y - cam.y) * TILE + TILE/2;
       ctx.fillStyle = '#ff7a7a'; ctx.beginPath(); ctx.moveTo(ax,ay-8); ctx.lineTo(ax-7,ay+7); ctx.lineTo(ax+7,ay+7); ctx.fill();
     });
-
+    // draw highlight for current tile (buy/upgrade)
+    const curKey = player.x+','+player.y;
+    const curSX = (player.x-cam.x)*TILE, curSY = (player.y-cam.y)*TILE;
+    if(!territory[curKey] && canBuyTile(player.x,player.y)){
+      ctx.strokeStyle='rgba(0,220,150,0.9)'; ctx.lineWidth=2; ctx.strokeRect(curSX+2,curSY+2,TILE-4,TILE-4);
+    } else if(territory[curKey] && !turrets[curKey]){
+      ctx.strokeStyle='rgba(255,220,120,0.9)'; ctx.lineWidth=2; ctx.strokeRect(curSX+2,curSY+2,TILE-4,TILE-4);
+    }
     // draw player
     const px = (player.x - cam.x)*TILE + TILE/2; const py = (player.y - cam.y)*TILE + TILE/2;
     ctx.fillStyle = '#7bf0ff'; ctx.beginPath(); ctx.arc(px,py,10,0,Math.PI*2); ctx.fill(); ctx.restore();

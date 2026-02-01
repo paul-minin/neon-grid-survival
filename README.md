@@ -6,7 +6,9 @@ Features
 - 20×20 wiederholendes Spielfeld
 - Spieler sammelt Energie-Orbs, baut Blockfelder, Slow-Felder, Häuser und **Turrets (Verteidigungsanlagen)**
 - Gebiet (Territorium) einnehmen (Taste `C` oder Häuser bauen) und auf eigenen Feldern Verteidigungsanlagen bauen
-- Aliens bewegen sich zufällig, greifen Gebäude an; Turrets schießen automatische auf Aliens
+- Neu: Auf der aktuellen Kachel kannst du jetzt mit **Buy Tile (5 Energy)** Kacheln kaufen (nur verbunden / angrenzend an bestehendes Gebiet). Auf einer gekauften Kachel kannst du **Upgrade → Turret (8 Energy)** drücken, um ein Geschütz zu bauen.
+- Wellenmodus: Aliens kommen als Wellen (jede ~1 Minute), Anzeige oben zeigt **Wave** und Countdown bis zur nächsten Welle.
+- Aliens bewegen sich zufällig, greifen Gebäude an; Turrets schießen automatisch auf Aliens
 - Pixeliger, neonfarbener Look (canvas pixelated)
 - Highscore gespeichert in localStorage
 - Touch & Keyboard Steuerung
