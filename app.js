@@ -65,13 +65,22 @@
 
   // resize handling
   function resize(){
-    const size = Math.max(100, Math.min(window.innerWidth, window.innerHeight) - 40);
-    canvas.width = size; canvas.height = size;
+    const size = Math.max(200, Math.min(window.innerWidth, window.innerHeight) - 40);
+    const ratio = window.devicePixelRatio || 1;
+    // Set CSS size (display size)
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    // Set actual canvas pixel size for sharp rendering
+    canvas.width = Math.floor(size * ratio);
+    canvas.height = Math.floor(size * ratio);
+    // logical scale so that TILE units remain consistent
     canvas.scaleFactor = (size / (VIEW * TILE)) || 1;
-    canvas.style.width = canvas.style.height = size+'px';
+    canvas.pixelRatio = ratio;
   }
   window.addEventListener('resize', resize);
   window.addEventListener('load', resize);
+  // ensure resize runs after a short delay to account for initial layout
+  setTimeout(resize, 50);
   resize();
 
   function toMap(x,y){
@@ -286,9 +295,15 @@
   let lastFrame = Date.now();
   function draw(){
     if(!ctx){ return }
-    ctx.save(); ctx.scale(canvas.scaleFactor, canvas.scaleFactor);
+    ctx.save();
+    // Use setTransform to correctly handle device pixel ratio + logical scale
+    const s = (canvas.pixelRatio || 1) * (canvas.scaleFactor || 1);
+    ctx.setTransform(s, 0, 0, s, 0, 0);
     ctx.imageSmoothingEnabled = false;
+    // clear using pixel-correct rectangle
     ctx.fillStyle = '#071018'; ctx.fillRect(0,0,VIEW*TILE, VIEW*TILE);
+    // stronger grid lines so tiles are visible even at odd scales
+    ctx.strokeStyle = 'rgba(127,255,220,0.06)'; ctx.lineWidth = 0.5;
 
     // center camera on player
     cam.x = player.x - Math.floor(VIEW/2);
@@ -319,9 +334,9 @@
     // draw orbs
     orbs.forEach(o=>{
       const bx = (o.x - cam.x) * TILE + TILE/2; const by = (o.y - cam.y) * TILE + TILE/2;
-      const b = 4 + Math.sin(Date.now()/200 + o.blink)*2;
-      ctx.beginPath(); ctx.fillStyle = '#00ffd5'; ctx.globalAlpha = 0.9; ctx.arc(bx,by,b,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
-      ctx.beginPath(); ctx.strokeStyle = 'rgba(0,255,213,0.25)'; ctx.lineWidth=1; ctx.arc(bx,by,b+3,0,Math.PI*2); ctx.stroke();
+      const b = Math.max(3, 3 + Math.sin(Date.now()/200 + o.blink)*1.6);
+      ctx.beginPath(); ctx.fillStyle = '#00ffd5'; ctx.globalAlpha = 0.95; ctx.arc(bx,by,b,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.strokeStyle = 'rgba(0,255,213,0.28)'; ctx.lineWidth=0.8; ctx.arc(bx,by,b+2.5,0,Math.PI*2); ctx.stroke();
     });
 
     // draw turrets
@@ -352,9 +367,12 @@
     } else if(territory[curKey] && !turrets[curKey]){
       ctx.strokeStyle='rgba(255,220,120,0.9)'; ctx.lineWidth=2; ctx.strokeRect(curSX+2,curSY+2,TILE-4,TILE-4);
     }
-    // draw player
-    const px = (player.x - cam.x)*TILE + TILE/2; const py = (player.y - cam.y)*TILE + TILE/2;
-    ctx.fillStyle = '#7bf0ff'; ctx.beginPath(); ctx.arc(px,py,10,0,Math.PI*2); ctx.fill(); ctx.restore();
+    // draw player (bigger and high-contrast)
+    const px = (player.x - cam.x)*TILE + TILE/2; const py = (player.y - cam.y) * TILE + TILE/2;
+    const pr = Math.max(6, Math.floor(TILE * 0.36));
+    ctx.fillStyle = '#7bf0ff'; ctx.beginPath(); ctx.arc(px,py,pr,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
 
     // game over overlay
     if(!running){ ctx.save(); ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#fff'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.fillText('Game Over - Klick Restart', canvas.width/2, canvas.height/2); ctx.restore(); }
