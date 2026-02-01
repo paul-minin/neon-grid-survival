@@ -1,0 +1,8 @@
+{
+  "name": "Neon Grid Survival",
+  "short_name": "NeonGrid",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#071018",
+  "theme_color": "#00ffd5"
+}
