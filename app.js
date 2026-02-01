@@ -4,6 +4,9 @@
 (() => {
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  // defensive defaults for rendering
+  canvas.scaleFactor = canvas.scaleFactor || 1;
+  let drawError = null;
   const scoreEl = document.getElementById('score');
   const energyEl = document.getElementById('energy');
   const timeEl = document.getElementById('time');
@@ -62,12 +65,14 @@
 
   // resize handling
   function resize(){
-    const size = Math.min(window.innerWidth, window.innerHeight) - 40;
+    const size = Math.max(100, Math.min(window.innerWidth, window.innerHeight) - 40);
     canvas.width = size; canvas.height = size;
-    canvas.scaleFactor = size / (VIEW * TILE);
+    canvas.scaleFactor = (size / (VIEW * TILE)) || 1;
     canvas.style.width = canvas.style.height = size+'px';
   }
-  window.addEventListener('resize', resize); resize();
+  window.addEventListener('resize', resize);
+  window.addEventListener('load', resize);
+  resize();
 
   function toMap(x,y){
     // repeating map
@@ -280,6 +285,7 @@
   // main loop & draw
   let lastFrame = Date.now();
   function draw(){
+    if(!ctx){ return }
     ctx.save(); ctx.scale(canvas.scaleFactor, canvas.scaleFactor);
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#071018'; ctx.fillRect(0,0,VIEW*TILE, VIEW*TILE);
@@ -352,12 +358,20 @@
 
     // game over overlay
     if(!running){ ctx.save(); ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#fff'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.fillText('Game Over - Klick Restart', canvas.width/2, canvas.height/2); ctx.restore(); }
+
+    // draw error overlay if something broke
+    if(drawError){ ctx.save(); ctx.fillStyle='rgba(200,40,40,0.9)'; ctx.fillRect(10,10,VIEW*TILE-20,80); ctx.fillStyle='#000'; ctx.font='14px monospace'; ctx.textAlign='left'; ctx.fillText('Rendering error: '+String(drawError).slice(0,120), 18, 34); ctx.restore(); }
   }
 
   function loop(){
-    const now = Date.now();
-    if(now - lastTick >= TICK){ gameTick(); lastTick = now }
-    draw(); requestAnimationFrame(loop);
+    try{
+      const now = Date.now();
+      if(now - lastTick >= TICK){ gameTick(); lastTick = now }
+      draw();
+    }catch(err){
+      console.error('Game loop error', err); drawError = err.toString();
+    }
+    requestAnimationFrame(loop);
   }
 
   function start(){
