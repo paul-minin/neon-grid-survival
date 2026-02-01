@@ -4,8 +4,10 @@ Minimalistisches Neon-Top-Down Endlos-Spiel (HTML5 Canvas, Vanilla JS). Spielbar
 
 Features
 - 20×20 wiederholendes Spielfeld
-- Spieler sammelt Energie-Orbs, baut Blockfelder, Slow-Felder und Häuser
-- Aliens bewegen sich zufällig und greifen Gebäude an
+- Spieler sammelt Energie-Orbs, baut Blockfelder, Slow-Felder, Häuser und **Turrets (Verteidigungsanlagen)**
+- Gebiet (Territorium) einnehmen (Taste `C` oder Häuser bauen) und auf eigenen Feldern Verteidigungsanlagen bauen
+- Aliens bewegen sich zufällig, greifen Gebäude an; Turrets schießen automatische auf Aliens
+- Pixeliger, neonfarbener Look (canvas pixelated)
 - Highscore gespeichert in localStorage
 - Touch & Keyboard Steuerung
 

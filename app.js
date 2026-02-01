@@ -14,17 +14,22 @@
   const MAPSIZE = 20; // repeating base map
   const TICK = 160; // ms per tile step
 
-  const types = {EMPTY:0,BLOCK:1,SLOW:2,HOUSE:3,TRAP:4};
+  const types = {EMPTY:0,BLOCK:1,SLOW:2,HOUSE:3,TRAP:4,TURRET:5};
   const colors = {};
   colors[types.EMPTY] = '#081017';
   colors[types.BLOCK] = '#203040';
   colors[types.SLOW] = '#13202a';
   colors[types.HOUSE] = '#062020';
+  colors[types.TURRET] = '#102022';
 
   // base repeating map
   const baseMap = new Array(MAPSIZE).fill(0).map(()=>new Array(MAPSIZE).fill(types.EMPTY));
   // seed some static obstacles
   for(let i=0;i<60;i++){baseMap[Math.floor(Math.random()*MAPSIZE)][Math.floor(Math.random()*MAPSIZE)] = Math.random()<0.08?types.BLOCK:types.EMPTY}
+
+  // territory & defenses
+  let turrets = {}; // key -> {x,y,cool}
+  let territory = {}; // claimed tiles by player (x,y) -> true
 
   // game state
   let player = {x:10,y:10,px:10,py:10,moveProgress:0};
@@ -86,7 +91,7 @@
     if(edge===1){x=player.x+range; y=player.y+Math.floor((Math.random()-0.5)*VIEW)}
     if(edge===2){y=player.y-range; x=player.x+Math.floor((Math.random()-0.5)*VIEW)}
     if(edge===3){y=player.y+range; x=player.x+Math.floor((Math.random()-0.5)*VIEW)}
-    aliens.push({x,y,dir:0});
+    aliens.push({x,y,dir:0,hp:2});
   }
 
   function updateAliens(){
@@ -95,7 +100,6 @@
         const dx = Math.sign((player.x - a.x) + (Math.random()-0.5)*4);
         const dy = Math.sign((player.y - a.y) + (Math.random()-0.5)*4);
         if(Math.abs(dx)>Math.abs(dy)) a.x+=dx; else a.y+=dy;
-        // wrap
       } else {
         const r = Math.floor(Math.random()*4);
         if(r===0) a.x--; if(r===1) a.x++; if(r===2) a.y--; if(r===3) a.y++;
@@ -104,8 +108,14 @@
       const hk = a.x+','+a.y;
       if(houses[hk]){ houses[hk].hp--; if(houses[hk].hp<=0){ delete houses[hk]; score -= 5; }}
     });
-    // check collision with player
-    aliens = aliens.filter(a=>{ if(a.x===player.x && a.y===player.y){ running=false; return false } return true });
+    // remove dead aliens and handle collisions with player
+    const survivors = [];
+    aliens.forEach(a=>{
+      if(a.hp<=0){ score += 4; energy+=1; return; }
+      if(a.x===player.x && a.y===player.y){ running=false; return; }
+      survivors.push(a);
+    });
+    aliens = survivors;
   }
 
   function collectOrbAt(x,y){
@@ -125,6 +135,19 @@
 
     // houses generate points
     Object.keys(houses).forEach(k=>{ houses[k].timer=(houses[k].timer||0)+1; if(houses[k].timer>=10){ houses[k].timer=0; score+=2 } });
+
+    // turrets attack
+    Object.keys(turrets).forEach(k=>{
+      const t = turrets[k]; t.cool = (t.cool||0) - 1;
+      if(t.cool<=0){
+        // find nearest alien within range 3
+        let target = null; let bestDist = 999;
+        aliens.forEach(a=>{
+          const d = Math.max(Math.abs(a.x - t.x), Math.abs(a.y - t.y)); if(d<=3 && d<bestDist){ bestDist=d; target=a }
+        });
+        if(target){ target.hp -= 1; t.cool = 3; }
+      }
+    });
 
     // time, difficulty
     timePlayed += TICK/1000;
@@ -149,6 +172,7 @@
   document.getElementById('build-block').addEventListener('click',()=>{ buildMode='block' });
   document.getElementById('build-slow').addEventListener('click',()=>{ buildMode='slow' });
   document.getElementById('build-house').addEventListener('click',()=>{ buildMode='house' });
+  document.getElementById('build-turret').addEventListener('click',()=>{ buildMode='turret' });
   document.getElementById('restart').addEventListener('click',()=>start());
 
   canvas.addEventListener('click', e=>{
@@ -159,7 +183,25 @@
     doBuildAt(gx,gy);
   });
 
-  function doBuildAt(x,y){ const cost = buildMode==='block'?5: buildMode==='slow'?4:10; if(energy<cost) return; if(getTile(x,y)!==types.EMPTY) return; if(buildMode==='block'){ setTile(x,y,types.BLOCK); } else if(buildMode==='slow'){ setTile(x,y,types.SLOW);} else if(buildMode==='house'){ houses[x+','+y]={hp:12}; setTile(x,y,types.HOUSE); } energy-=cost; score+=1; }
+  function isOwned(x,y){ if(territory[x+','+y]) return true; // owned
+    // adjacent to houses also counts
+    if(houses[(x+1)+','+y]||houses[(x-1)+','+y]||houses[x+','+(y+1)]||houses[x+','+(y-1)]) return true; return false; }
+
+  function claimTerritory(cx,cy,rad=2){ for(let oy=-rad; oy<=rad; oy++){ for(let ox=-rad; ox<=rad; ox++){ territory[(cx+ox)+','+(cy+oy)]=true } } }
+
+  function doBuildAt(x,y){
+    const cost = buildMode==='block'?5: buildMode==='slow'?4: buildMode==='house'?10: buildMode==='turret'?6:999;
+    if(energy<cost) return;
+    if(getTile(x,y)!==types.EMPTY) return;
+    if(buildMode==='block'){ setTile(x,y,types.BLOCK); }
+    else if(buildMode==='slow'){ setTile(x,y,types.SLOW); }
+    else if(buildMode==='house'){ houses[x+','+y]={hp:12}; setTile(x,y,types.HOUSE); claimTerritory(x,y,2); }
+    else if(buildMode==='turret'){ // turrets only on owned tiles
+      if(!isOwned(x,y)) return;
+      turrets[x+','+y] = {x,y,cool:0}; setTile(x,y,types.TURRET);
+    }
+    energy -= cost; score += 1;
+  }
 
   // keyboard
   window.addEventListener('keydown', e=>{
@@ -169,6 +211,9 @@
     if(k==='arrowdown' || k==='s') tryMove(0,1);
     if(k==='arrowleft' || k==='a') tryMove(-1,0);
     if(k==='arrowright' || k==='d') tryMove(1,0);
+    if(k==='c'){ // claim current tile (cost 3)
+      const cost = 3; const key = player.x+','+player.y; if(energy>=cost && !territory[key]){ territory[key]=true; energy-=cost; score+=1 }
+    }
   });
 
   // mobile buttons
@@ -189,6 +234,7 @@
   let lastFrame = Date.now();
   function draw(){
     ctx.save(); ctx.scale(canvas.scaleFactor, canvas.scaleFactor);
+    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#071018'; ctx.fillRect(0,0,VIEW*TILE, VIEW*TILE);
 
     // center camera on player
@@ -209,12 +255,27 @@
       }
     }
 
+    // draw territory overlay
+    Object.keys(territory).forEach(k=>{
+      const [tx,ty]=k.split(',').map(Number);
+      const sx=(tx-cam.x)*TILE, sy=(ty-cam.y)*TILE;
+      ctx.fillStyle='rgba(50,220,120,0.08)'; ctx.fillRect(sx,sy,TILE,TILE);
+      ctx.strokeStyle='rgba(50,220,120,0.12)'; ctx.strokeRect(sx+0.5,sy+0.5,TILE-1,TILE-1);
+    });
+
     // draw orbs
     orbs.forEach(o=>{
       const bx = (o.x - cam.x) * TILE + TILE/2; const by = (o.y - cam.y) * TILE + TILE/2;
       const b = 4 + Math.sin(Date.now()/200 + o.blink)*2;
       ctx.beginPath(); ctx.fillStyle = '#00ffd5'; ctx.globalAlpha = 0.9; ctx.arc(bx,by,b,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
       ctx.beginPath(); ctx.strokeStyle = 'rgba(0,255,213,0.25)'; ctx.lineWidth=1; ctx.arc(bx,by,b+3,0,Math.PI*2); ctx.stroke();
+    });
+
+    // draw turrets
+    Object.keys(turrets).forEach(k=>{
+      const t=turrets[k]; const sx=(t.x-cam.x)*TILE, sy=(t.y-cam.y)*TILE;
+      ctx.fillStyle='#ffd19a'; ctx.fillRect(sx+6,sy+6, TILE-12, TILE-12);
+      ctx.fillStyle='#ff8f42'; ctx.fillRect(sx+TILE/2-3, sy+TILE/2-3,6,6);
     });
 
     // draw houses and their hp
@@ -245,7 +306,7 @@
 
   function start(){
     // reset state
-    player = {x:10,y:10}; orbs = []; aliens=[]; houses={}; score=0; energy=0; timePlayed=0; running = true; lastSpawnOrb=0; lastAlienSpawn=0; scoreEl.textContent=score; energyEl.textContent=energy; timeEl.textContent=0;
+    player = {x:10,y:10}; orbs = []; aliens=[]; houses={}; turrets={}; territory={}; score=0; energy=0; timePlayed=0; running = true; lastSpawnOrb=0; lastAlienSpawn=0; scoreEl.textContent=score; energyEl.textContent=energy; timeEl.textContent=0;
   }
 
   start(); loop();
